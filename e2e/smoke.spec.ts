@@ -7,14 +7,14 @@ const topTitle = (page: Page) => topCard(page).getByRole('heading', { level: 2 }
 const leftCount = async (page: Page) => Number((await page.locator('#count').innerText()).match(/\d+/)![0]);
 
 async function openDemoDeck(page: Page) {
-  await page.goto('/');
+  await page.goto('./');
   await page.getByRole('button', { name: 'Try the demo' }).click();
   await expect(topCard(page)).toBeVisible({ timeout: 15_000 });
   await expect(page.locator('#count')).toContainText('left');
 }
 
 test('initial setup has no horizontal overflow', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('./');
   await expect(page.getByRole('heading', { name: 'Find your next watch' })).toBeVisible();
   const { scrollW, clientW } = await page.evaluate(() => ({
     scrollW: document.documentElement.scrollWidth,
@@ -82,7 +82,7 @@ test('pointer drag left skips the card', async ({ page }) => {
 });
 
 test('settings modal opens and closes', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('./');
   await page.getByRole('button', { name: 'Settings', exact: true }).first().click();
   const dialog = page.getByRole('dialog', { name: 'Settings' });
   await expect(dialog).toBeVisible();
