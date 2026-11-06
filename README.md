@@ -2,7 +2,7 @@
 
 A swipe-style recommendation deck for **Overseerr** and **Jellyseerr**. It is a browser-only static SPA (Vite + TypeScript, no runtime dependencies): there is no app backend, no analytics and no secrets in the code. Your server URL and API key live in this browser's `localStorage` and are only ever sent to the server you configure.
 
-Published at <https://kslat3r.github.io/overseer-recommendations/> (GitHub Pages, project site, `.nojekyll` included). The build uses a relative base, so it works from any sub-path.
+Published at <https://kslat3r.github.io/overseer-recommendations/> (GitHub Pages, served from the `gh-pages` branch, `.nojekyll` included). The build uses a relative base, so it works from any sub-path.
 
 ## How it works
 
@@ -99,4 +99,19 @@ pnpm test      # vitest, against a mocked API (src/mock/mockApi.ts)
 pnpm build     # typecheck + production build into dist/
 ```
 
-`dist/` is a plain static folder; publish it to the `gh-pages` branch or any static host. No workflow files are included.
+### Browser smoke tests
+
+Playwright tests (mobile viewport, `e2e/`) run against the **production build**, not the dev server:
+
+```sh
+pnpm exec playwright install chromium   # first time only
+pnpm build
+python3 -m http.server 4173 --bind 127.0.0.1 --directory dist &
+pnpm test:e2e                           # E2E_BASE_URL overrides http://127.0.0.1:4173
+```
+
+They cover setup overflow, the demo deck, skip (and its persistence), request via key/button, drag-to-skip and the settings dialog. A mobile deck screenshot is written to `/workspace/overseer-deck.png` (override with `E2E_SCREENSHOT`).
+
+## Deployment
+
+The site is served from the `gh-pages` branch, which contains only the contents of `dist/` (`.nojekyll` included). `main` holds the source. To publish, run `pnpm build` and push the contents of `dist/` to `gh-pages`; any other static host works the same way. No workflow files are included.
