@@ -88,16 +88,16 @@ async function scan(useCache = false) {
   render();
 }
 
-function toast(message: string, kind: 'ok' | 'err' | 'info' = 'info', hint = '') {
+function errorToast(message: string, hint = '') {
   let region = document.getElementById('toasts');
   if (!region) {
     region = h('div', { id: 'toasts', class: 'toasts', role: 'status', 'aria-live': 'polite' });
     document.body.append(region);
   }
-  const t = h('div', { class: `toast ${kind}` }, h('strong', {}, message));
+  const t = h('div', { class: 'toast err' }, h('strong', {}, message));
   if (hint) t.append(h('span', {}, hint));
   region.append(t);
-  setTimeout(() => t.remove(), kind === 'err' ? 7000 : 3500);
+  setTimeout(() => t.remove(), 7000);
 }
 
 const topCard = () => document.querySelector<HTMLElement>('.card[data-top="1"]');
@@ -132,7 +132,6 @@ function skipTop() {
     busy = false;
     afterAdvance();
   });
-  toast(`Skipped ${c.title}`, 'info');
 }
 
 async function requestTop() {
@@ -148,7 +147,6 @@ async function requestTop() {
   try {
     await requestCandidate(client, c, skips);
     removeFromDeck(c.key);
-    toast(`Requested ${c.title}`, 'ok', c.mediaType === 'tv' ? 'Season 1 sent to Overseerr.' : '');
     flyOut(1, () => {
       deck.shift();
       busy = false;
@@ -163,7 +161,7 @@ async function requestTop() {
       render();
       return;
     }
-    toast(`Couldn’t request ${c.title}`, 'err', [d.title, d.hint].filter(Boolean).join(' — '));
+    errorToast(`Couldn’t request ${c.title}`,[d.title, d.hint].filter(Boolean).join(' — '));
     busy = false;
     springBack();
     render(false);

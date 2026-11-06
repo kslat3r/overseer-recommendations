@@ -66,7 +66,6 @@ test('swipe left skips, persists the skip, and the cached deck omits it on reloa
   await openDemoDeck(page);
   const before = await topTitle(page).innerText();
   await swipe(page, -1);
-  await expect(page.locator('.toast.info')).toContainText(`Skipped ${before}`);
   await expect(topTitle(page)).not.toHaveText(before);
   const stored = await page.evaluate((k) => JSON.parse(localStorage.getItem(k) ?? '[]'), SKIPPED_KEY);
   expect(stored).toHaveLength(1);
@@ -78,11 +77,10 @@ test('swipe left skips, persists the skip, and the cached deck omits it on reloa
   expect(cached.deck.some((c: { title: string }) => c.title === before)).toBe(false);
 });
 
-test('swipe right requests, advances, shows a toast and stays gone after reload', async ({ page }) => {
+test('swipe right requests, advances and stays gone after reload', async ({ page }) => {
   await openDemoDeck(page);
   const before = await topTitle(page).innerText();
   await swipe(page, 1);
-  await expect(page.locator('.toast.ok')).toContainText(`Requested ${before}`);
   await expect(topTitle(page)).not.toHaveText(before);
 
   await page.reload();
@@ -94,11 +92,9 @@ test('arrow keys skip and request', async ({ page }) => {
   await openDemoDeck(page);
   const first = await topTitle(page).innerText();
   await page.keyboard.press('ArrowLeft');
-  await expect(page.locator('.toast.info')).toContainText(`Skipped ${first}`);
   await expect(topTitle(page)).not.toHaveText(first);
   const second = await topTitle(page).innerText();
   await page.keyboard.press('ArrowRight');
-  await expect(page.locator('.toast.ok')).toContainText(`Requested ${second}`);
   await expect(topTitle(page)).not.toHaveText(second);
 });
 
