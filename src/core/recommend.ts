@@ -64,6 +64,7 @@ export async function buildRecommendations(client: OverseerrClient, o: BuildOpti
   const lib = await scanLibrary(client, { pageSize: o.pageSize });
   const sources = [...lib.sources.entries()].slice(0, o.maxSources ?? 150);
   const found = new Map<string, { c: Candidate; from: Set<string> }>();
+  const names = new Map<string, string>();
   const blocked = new Set<string>();
   let failures = 0;
   let attempts = 0;
@@ -71,6 +72,14 @@ export async function buildRecommendations(client: OverseerrClient, o: BuildOpti
   let done = 0;
 
   const work = sources.map(([srcKey, src]) => async () => {
+    // One detail call per source, only to learn its display name; failure just means no name.
+    try {
+      const d = await client.getTitle(src.mediaType, src.tmdbId);
+      const name = (src.mediaType === 'movie' ? d.title : d.name) ?? d.title ?? d.name;
+      if (name) names.set(srcKey, name);
+    } catch {
+      /* unnamed source still counts toward sourceCount */
+    }
     for (const kind of ['recommendations', 'similar'] as const) {
       attempts++;
       let page;
@@ -103,6 +112,7 @@ export async function buildRecommendations(client: OverseerrClient, o: BuildOpti
               posterPath: r.posterPath ?? null,
               voteAverage: r.voteAverage ?? 0,
               sourceCount: 0,
+              sourceTitles: [],
             },
           };
           found.set(k, entry);
@@ -123,7 +133,11 @@ export async function buildRecommendations(client: OverseerrClient, o: BuildOpti
     throw lastError instanceof ApiError ? lastError : new Error('Every recommendation lookup failed');
   }
 
-  const candidates = [...found.values()].filter(({ c }) => !blocked.has(c.key)).map(({ c, from }) => ({ ...c, sourceCount: from.size }));
+  const candidates = [...found.values()].filter(({ c }) => !blocked.has(c.key)).map(({ c, from }) => ({
+      ...c,
+      sourceCount: from.size,
+      sourceTitles: [...new Set([...from].map((k) => names.get(k)).filter((n): n is string => !!n))].sort((a, b) => a.localeCompare(b)),
+    }));
   candidates.sort((a, b) => b.sourceCount - a.sourceCount || b.voteAverage - a.voteAverage || a.title.localeCompare(b.title));
   return { candidates, stats: { librarySize: lib.sources.size, sourcesScanned: sources.length, sourceFailures: failures } };
 }

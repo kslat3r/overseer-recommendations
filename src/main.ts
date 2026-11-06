@@ -3,6 +3,7 @@ import { createClient, normalizeBaseUrl, type OverseerrClient } from './api/clie
 import { describeError } from './api/errors';
 import type { Candidate } from './api/types';
 import { requestCandidate } from './core/actions';
+import { clearDeck, loadDeck, removeFromDeck, saveDeck } from './core/deckCache';
 import { buildRecommendations } from './core/recommend';
 import { clearSettings, createSkipStore, loadSettings, saveSettings, type Settings } from './core/storage';
 import { createMockApi } from './mock/mockApi';
@@ -46,9 +47,20 @@ function makeClient(): OverseerrClient {
   return createClient({ baseUrl: settings.baseUrl, apiKey: settings.apiKey });
 }
 
-async function scan() {
+/** `useCache` is only set on page load; every explicit refresh/retry rebuilds and rewrites the cache. */
+async function scan(useCache = false) {
   const token = ++scanToken;
   failure = null;
+  if (useCache) {
+    const cached = loadDeck(skips.all());
+    if (cached?.length) {
+      client = makeClient();
+      deck = cached;
+      view = 'ready';
+      render();
+      return;
+    }
+  }
   view = 'loading';
   progress = 'Reading your library…';
   render();
@@ -66,6 +78,7 @@ async function scan() {
     });
     if (token !== scanToken) return;
     deck = res.candidates;
+    saveDeck(deck);
     view = deck.length ? 'ready' : 'empty';
   } catch (e) {
     if (token !== scanToken) return;
@@ -113,6 +126,7 @@ function skipTop() {
   skips.add(c.key);
   busy = true;
   render(false);
+  removeFromDeck(c.key);
   flyOut(-1, () => {
     deck.shift();
     busy = false;
@@ -133,6 +147,7 @@ async function requestTop() {
   }
   try {
     await requestCandidate(client, c, skips);
+    removeFromDeck(c.key);
     toast(`Requested ${c.title}`, 'ok', c.mediaType === 'tv' ? 'Season 1 sent to Overseerr.' : '');
     flyOut(1, () => {
       deck.shift();
@@ -188,7 +203,6 @@ function render(full = true) {
   else main.append(deckView());
   app.replaceChildren(header, main);
   if (view === 'ready') {
-    app.append(controls());
     const el = topCard();
     if (el) {
       detachSwipe = attachSwipe(
@@ -241,6 +255,7 @@ function setupView() {
     'Connect your Overseerr or Jellyseerr and get swipeable picks based on what is already in your library.',
     button('Open settings', () => ((settingsOpen = true), render()), 'btn primary'),
     button('Try the demo', () => {
+      clearDeck();
       settings = { ...settings, demo: true };
       saveSettings(settings);
       void scan();
@@ -291,6 +306,16 @@ function deckView() {
   return wrap;
 }
 
+const BECAUSE_MAX = 3;
+
+/** Cached decks from before source names existed fall back to the count. */
+function becauseLine(c: Candidate): string {
+  const names = c.sourceTitles;
+  if (!names.length) return `Similar to ${c.sourceCount} title${c.sourceCount === 1 ? '' : 's'} in your library`;
+  const more = names.length - BECAUSE_MAX;
+  return `Because you have: ${names.slice(0, BECAUSE_MAX).join(', ')}${more > 0 ? ` +${more} more` : ''}`;
+}
+
 function cardEl(c: Candidate, depth: number) {
   const card = h('article', {
     class: 'card',
@@ -307,7 +332,7 @@ function cardEl(c: Candidate, depth: number) {
   }
   poster.append(h('span', { class: 'poster-fallback', 'aria-hidden': 'true' }, c.title.slice(0, 1)));
   const meta = [c.mediaType === 'tv' ? 'TV' : 'Movie', c.year, c.voteAverage ? `★ ${c.voteAverage.toFixed(1)}` : ''].filter(Boolean).join(' · ');
-  const why = `Similar to ${c.sourceCount} title${c.sourceCount === 1 ? '' : 's'} in your library`;
+  const why = becauseLine(c);
   card.append(
     poster,
     h('div', { class: 'stamp request', 'aria-hidden': 'true' }, 'REQUEST'),
@@ -317,24 +342,7 @@ function cardEl(c: Candidate, depth: number) {
   return card;
 }
 
-function controls() {
-  const skipB = h('button', { id: 'skip-btn', class: 'round skip', type: 'button', 'aria-label': 'Skip (left arrow)' }, '✕');
-  const reqB = h('button', { id: 'req-btn', class: 'round request', type: 'button', 'aria-label': 'Request (right arrow)' }, '＋');
-  skipB.addEventListener('click', skipTop);
-  reqB.addEventListener('click', () => void requestTop());
-  return h('footer', { class: 'controls' }, skipB, h('p', { id: 'count', class: 'count' }), reqB);
-}
-
 function updateControls() {
-  for (const id of ['skip-btn', 'req-btn']) {
-    const b = document.getElementById(id) as HTMLButtonElement | null;
-    if (b) b.disabled = busy;
-  }
-  const req = document.getElementById('req-btn');
-  req?.classList.toggle('pending', busy);
-  req?.setAttribute('aria-busy', String(busy));
-  const n = document.getElementById('count');
-  if (n) n.textContent = `${deck.length} left`;
   document.querySelector('.deck')?.setAttribute('aria-busy', String(busy));
 }
 
@@ -361,6 +369,7 @@ function serverSettingsDialog() {
   }, 'btn ghost');
   const close = button('Close', () => ((settingsOpen = false), render()), 'btn primary');
   const logout = button('Sign out', async () => {
+    clearDeck();
     try {
       await fetch('/logout', { method: 'POST', credentials: 'same-origin' });
     } finally {
@@ -415,7 +424,8 @@ function settingsDialog() {
   const cancel = button('Close', () => ((settingsOpen = false), render()), 'btn ghost');
   const reset = button('Forget settings', () => {
     clearSettings();
-    settings = { baseUrl: '', apiKey: '', demo: false };
+    clearDeck();
+    settings ={ baseUrl: '', apiKey: '', demo: false };
     settingsOpen = false;
     view = 'setup';
     deck = [];
@@ -440,6 +450,7 @@ function settingsDialog() {
       return;
     }
     saveSettings(settings);
+    clearDeck(); // possibly a different server
     settingsOpen = false;
     void scan();
   });
@@ -487,7 +498,7 @@ async function detectServerMode(): Promise<boolean> {
 
 void (async () => {
   serverMode = await detectServerMode();
-  if (isConfigured()) void scan();
+  if (isConfigured()) void scan(true);
   else render();
 })();
 

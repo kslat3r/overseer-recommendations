@@ -19,6 +19,7 @@ http
       const f = url.searchParams.get('filter');
       return send(res, 200, { pageInfo: { pages: 1, pageSize: 100, results: f === 'available' ? 1 : 0, page: 1 }, results: f === 'available' ? [{ tmdbId: 1, mediaType: 'movie', status: 5 }] : [] });
     }
+    if (p === '/api/v1/movie/1') return send(res, 200, { id: 1, title: 'Fake Library Movie', apiKey: KEY });
     if (/^\/api\/v1\/movie\/1\/recommendations$/.test(p)) {
       return send(res, 200, {
         page: 1,

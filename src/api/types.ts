@@ -41,6 +41,13 @@ export interface ResultsPage {
   results: TitleResult[];
 }
 
+/** Subset of MovieDetails / TvDetails: movies carry `title`, shows carry `name`. */
+export interface TitleDetail {
+  id?: number;
+  title?: string;
+  name?: string;
+}
+
 export interface UserInfo {
   id: number;
   email?: string;
@@ -61,5 +68,8 @@ export interface Candidate {
   overview: string;
   posterPath: string | null;
   voteAverage: number;
+  /** Distinct library titles that produced this pick. */
   sourceCount: number;
+  /** Names of those library titles, unique and sorted by name. */
+  sourceTitles: string[];
 }

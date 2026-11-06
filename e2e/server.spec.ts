@@ -19,7 +19,10 @@ test.describe('server mode', () => {
     await page.getByLabel('Password').fill(password);
     await page.getByRole('button', { name: 'Sign in' }).click();
     await expect(page.locator('.card[data-top="1"]')).toBeVisible({ timeout: 15_000 });
-    await expect(page.locator('#count')).toContainText('left');
+    await expect(page.locator('#count')).toHaveCount(0);
+    await expect(page.locator('.card[data-top="1"] .why')).toContainText('Because you have: Fake Library Movie');
+    const cache = await page.evaluate(() => localStorage.getItem('overseer-recs:deck'));
+    expect(cache).not.toContain('e2e-key');
 
     const cookie = (await context.cookies()).find((c) => c.name === 'overseer_session');
     expect(cookie?.httpOnly).toBe(true);
@@ -36,6 +39,7 @@ test.describe('server mode', () => {
 
     await page.getByRole('button', { name: 'Sign out' }).click();
     await expect(page).toHaveURL(/\/login$/);
+    expect(await page.evaluate(() => localStorage.getItem('overseer-recs:deck'))).toBeNull();
     await page.goto('./');
     await expect(page).toHaveURL(/\/login$/);
   });

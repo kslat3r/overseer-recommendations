@@ -1,5 +1,5 @@
 import { ApiError } from './errors';
-import type { MediaFilter, MediaPage, MediaType, ResultsPage, UserInfo } from './types';
+import type { MediaFilter, MediaPage, MediaType, ResultsPage, TitleDetail, UserInfo } from './types';
 
 export interface ClientOptions {
   baseUrl: string;
@@ -19,6 +19,7 @@ export interface OverseerrClient {
   getMe(): Promise<UserInfo>;
   getMediaPage(filter: MediaFilter, take: number, skip: number): Promise<MediaPage>;
   getTitles(type: MediaType, id: number, kind: 'recommendations' | 'similar', page: number): Promise<ResultsPage>;
+  getTitle(type: MediaType, id: number): Promise<TitleDetail>;
   requestTitle(type: MediaType, id: number): Promise<unknown>;
 }
 
@@ -177,6 +178,7 @@ export function createClient(opts: ClientOptions): OverseerrClient {
     getMe: () => call<UserInfo>('GET', '/auth/me'),
     getMediaPage: (filter, take, skip) => call<MediaPage>('GET', `/media?filter=${filter}&take=${take}&skip=${skip}`),
     getTitles: (type, id, kind, page) => call<ResultsPage>('GET', `/${type}/${id}/${kind}?page=${page}`),
+    getTitle: (type, id) => call<TitleDetail>('GET', `/${type}/${id}`),
     requestTitle: (type, id) =>
       call('POST', '/request', type === 'tv' ? { mediaType: 'tv', mediaId: id, seasons: [1] } : { mediaType: 'movie', mediaId: id }),
   };

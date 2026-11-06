@@ -11,7 +11,8 @@ Mode detection: on load the page requests `api/status`. Only the Node server ans
 
 1. `GET /api/v1/auth/me` verifies the URL and key.
 2. It pages through `GET /api/v1/media` (`available`, `partial`, `processing`, `allavailable`, `pending` filters) to learn what you own, are downloading, or have requested.
-3. For library titles it fetches `/api/v1/{movie|tv}/{id}/recommendations` and `/similar`.
+3. For each library title it fetches the title name (`/api/v1/{movie|tv}/{id}`) plus `/recommendations` and `/similar`. Each card says which library titles produced it ("Because you have: …").
+4. The computed deck is cached in this browser's `localStorage` for 24 hours (no credentials are stored in it). The ⟳ button rebuilds it; signing out or forgetting settings clears it.
 4. Results are de-duplicated by media type + TMDB id, anything in the library, in requests, skipped, or already flagged by Overseerr is dropped, and the rest are ranked by how many **distinct** library titles point to them (ties: TMDB rating).
 5. Swipe / drag / press:
    - **Left / `←` / ✕** saves a skip in `localStorage` so the title never returns.
@@ -32,6 +33,7 @@ Fixed whitelist; the upstream URL and body are rebuilt from validated values and
 | `GET /api/v1/auth/me` | no query | same; response reduced to id/name/email fields |
 | `GET /api/v1/media` | `filter` in `all,available,partial,allavailable,processing,pending`; `take` 1–100; `skip` ≥ 0 | same |
 | `GET /api/v1/{movie\|tv}/{id}/{recommendations\|similar}` | numeric id; `page` 1–500 | same |
+| `GET /api/v1/{movie\|tv}/{id}` | numeric id; no query | reduced to `id`, `title`, `name` |
 | `POST /api/v1/request` | `{mediaType,mediaId}` only | movie: `{"mediaType":"movie","mediaId":ID}`; tv: `{"mediaType":"tv","mediaId":ID,"seasons":[1]}` |
 
 Anything else is 404/405/400. Errors: no/expired session → `401 {"code":"session"}` (the app shows **Sign in**); Overseerr rejecting the server's key → `502 {"code":"upstream-auth"}` (a distinct "update OVERSEERR_API_KEY on the server" message). The API key is redacted from all output and never logged.

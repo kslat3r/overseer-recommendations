@@ -7,6 +7,8 @@ export interface MockFixtures {
   recommendations: Record<string, TitleResult[]>;
   /** key "movie:123" -> similar titles */
   similar: Record<string, TitleResult[]>;
+  /** key "movie:123" -> display name of a library title (served by GET /movie/123 or /tv/123). */
+  names?: Record<string, string>;
 }
 
 export interface MockOptions {
@@ -68,6 +70,12 @@ export function createMockApi(opts: MockOptions = {}) {
         results: all.slice(skip, skip + take),
       });
     }
+    const d = path.match(/^\/api\/v1\/(movie|tv)\/(\d+)$/);
+    if (method === 'GET' && d) {
+      const name = fx.names?.[`${d[1]}:${d[2]}`];
+      if (!name) return jsonRes({ message: 'Not found' }, 404);
+      return jsonRes({ id: Number(d[2]), ...(d[1] === 'movie' ? { title: name } : { name }) });
+    }
     const m = path.match(/^\/api\/v1\/(movie|tv)\/(\d+)\/(recommendations|similar)$/);
     if (method === 'GET' && m) {
       const table = m[3] === 'recommendations' ? fx.recommendations : fx.similar;
@@ -121,6 +129,7 @@ export function defaultFixtures(): MockFixtures {
       { id: 4, tmdbId: 12, mediaType: 'movie', status: 3 },
       { id: 5, tmdbId: 2, mediaType: 'tv', status: 2 },
     ],
+    names: { 'movie:1': 'Already In Library', 'movie:10': 'Blade Runner', 'tv:11': 'Severance', 'movie:12': 'Arrival' },
     recommendations: {
       'movie:10': [neon, glass, owned, skipMe],
       'tv:11': [neon, dust, asked],

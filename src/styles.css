@@ -28,8 +28,8 @@ button, input { font: inherit; color: inherit; }
 .icon-btn:hover:not(:disabled) { background: #ffffff1c; }
 .icon-btn:disabled { opacity: .4; cursor: default; }
 .stage { flex: 1; display: flex; flex-direction: column; justify-content: center; min-height: 0; padding: 8px 0; }
-.deck { position: relative; width: 100%; aspect-ratio: 3 / 4.3; max-height: calc(100dvh - 230px); margin: 0 auto; }
-@media (min-aspect-ratio: 1/1) { .deck { max-height: calc(100dvh - 200px); } }
+.deck { position: relative; width: 100%; aspect-ratio: 3 / 4.3; max-height: calc(100dvh - 130px); margin: 0 auto; }
+@media (min-aspect-ratio: 1/1) { .deck { max-height: calc(100dvh - 110px); } }
 .card {
   --intent: 0; --tilt: 0;
   position: absolute; inset: 0; border-radius: var(--radius); overflow: hidden; background: var(--bg2);
@@ -46,29 +46,22 @@ button, input { font: inherit; color: inherit; }
 .poster-fallback { font-size: 7rem; font-weight: 800; color: #ffffff22; }
 .info {
   position: absolute; left: 0; right: 0; bottom: 0; padding: 60px 18px 18px;
+  display: flex; flex-direction: column; max-height: 75%; /* never taller than the card */
   background: linear-gradient(to top, #05060bf2 35%, #05060b99 70%, transparent);
 }
 .info h2 { margin: 2px 0 4px; font-size: 1.6rem; line-height: 1.15; text-wrap: balance; }
 .meta { margin: 0; color: var(--gold); font-size: .85rem; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
 .why { margin: 0 0 6px; color: var(--mute); font-size: .85rem; }
-.overview { margin: 0; font-size: .92rem; color: #dcd9d0; display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+/* Full synopsis; scrolls vertically inside the card. pan-y keeps horizontal drags for the swipe handler. */
+.overview {
+  margin: 0; font-size: .92rem; color: #dcd9d0; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  touch-action: pan-y; -webkit-overflow-scrolling: touch; user-select: text; -webkit-user-select: text;
+}
 .stamp {
   position: absolute; top: 22px; padding: 4px 12px; border: 4px solid; border-radius: 10px; font-weight: 800; font-size: 1.5rem; letter-spacing: .08em; opacity: 0; pointer-events: none;
 }
 .stamp.request { left: 18px; color: var(--green); transform: rotate(-12deg); opacity: clamp(0, var(--intent), 1); }
 .stamp.skip { right: 18px; color: var(--red); transform: rotate(12deg); opacity: clamp(0, calc(var(--intent) * -1), 1); }
-.controls { display: flex; align-items: center; justify-content: center; gap: 28px; padding: 16px 0 20px; }
-.count { margin: 0; min-width: 70px; text-align: center; color: var(--mute); font-size: .9rem; }
-.round {
-  width: 68px; height: 68px; border-radius: 50%; border: 2px solid; background: #0b0d14cc; font-size: 1.7rem; cursor: pointer; transition: transform .15s, background .15s;
-}
-.round:hover:not(:disabled) { transform: scale(1.08); }
-.round:active:not(:disabled) { transform: scale(.94); }
-.round:disabled { opacity: .5; cursor: progress; }
-.round.skip { color: var(--red); border-color: var(--red); }
-.round.request { color: var(--green); border-color: var(--green); }
-.round.pending { animation: pulse 1s infinite; }
-@keyframes pulse { 50% { background: #4cd9a033; } }
 .panel {
   text-align: center; padding: 32px 22px; border-radius: var(--radius); background: #ffffff0a; border: 1px solid #ffffff14; backdrop-filter: blur(6px);
   display: flex; flex-direction: column; gap: 10px; align-items: center;

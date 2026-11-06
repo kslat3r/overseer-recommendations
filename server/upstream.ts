@@ -22,6 +22,8 @@ export interface UpstreamCall {
   body?: string;
   /** auth/me responses are reduced to a few non-sensitive fields. */
   pickUser?: boolean;
+  /** Title detail responses are reduced to id + title/name. */
+  pickTitle?: boolean;
 }
 
 const FILTERS = new Set(['all', 'available', 'partial', 'allavailable', 'processing', 'pending']);
@@ -82,6 +84,13 @@ export function resolveRoute(method: string, path: string, query: Record<string,
     if (id < 1) throw new RouteError(400, 'bad-request', 'Invalid id.');
     const page = int(query.page, 'page', 1, 500, 1);
     return { method: 'GET', path: `/${m[1]}/${id}/${m[3]}?page=${page}` };
+  }
+  if ((m = /^\/(movie|tv)\/(\d{1,9})$/.exec(path))) {
+    if (method !== 'GET') throw new RouteError(405, 'method-not-allowed', 'Method not allowed.');
+    onlyQuery(query, []);
+    const id = Number(m[2]);
+    if (id < 1) throw new RouteError(400, 'bad-request', 'Invalid id.');
+    return { method: 'GET', path: `/${m[1]}/${id}`, pickTitle: true };
   }
   if (path === '/request') {
     if (method !== 'POST') throw new RouteError(405, 'method-not-allowed', 'Method not allowed.');
@@ -157,6 +166,13 @@ export async function callUpstream(
     const u = parsed as Record<string, unknown>;
     const out: Record<string, unknown> = {};
     for (const k of ['id', 'email', 'displayName', 'username', 'plexUsername', 'jellyfinUsername']) if (u[k] !== undefined) out[k] = u[k];
+    return { status: 200, json: out };
+  }
+  if (call.pickTitle) {
+    const d = parsed as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    if (typeof d.id === 'number') out.id = d.id;
+    for (const k of ['title', 'name']) if (typeof d[k] === 'string') out[k] = redact(d[k] as string).slice(0, 300);
     return { status: 200, json: out };
   }
   return { status: 200, json: JSON.parse(redact(JSON.stringify(parsed))) };

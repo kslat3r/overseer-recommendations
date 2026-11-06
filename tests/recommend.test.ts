@@ -54,6 +54,36 @@ describe('buildRecommendations', () => {
     ]);
   });
 
+  it('records the sorted, distinct names of the library titles behind each pick', async () => {
+    const { client, mock } = setup();
+    const { candidates } = await buildRecommendations(client, { skipped: new Set(['movie:106']) });
+    const by = (k: string) => candidates.find((c) => c.key === k)!;
+    // movie:10 Blade Runner, tv:11 Severance (name, not title), movie:12 Arrival
+    expect(by('movie:101').sourceTitles).toEqual(['Arrival', 'Blade Runner', 'Severance']);
+    expect(by('movie:101').sourceCount).toBe(3);
+    expect(by('tv:105').sourceTitles).toEqual(['Blade Runner', 'Severance']);
+    expect(by('tv:103').sourceTitles).toEqual(['Severance']);
+    // exactly one detail fetch per scanned source
+    const details = mock.calls.filter((c) => /^\/api\/v1\/(movie|tv)\/\d+$/.test(c.path)).map((c) => c.path).sort();
+    expect(details).toEqual(['/api/v1/movie/1', '/api/v1/movie/10', '/api/v1/movie/12', '/api/v1/tv/11']);
+  });
+
+  it('still recommends (unnamed) when a source detail lookup fails', async () => {
+    const { mock } = setup();
+    const client = createClient({
+      baseUrl: 'https://o.example',
+      apiKey: mock.apiKey,
+      pageProtocol: 'https:',
+      fetchImpl: ((u: string, i: RequestInit) =>
+        /\/api\/v1\/tv\/11$/.test(String(u)) ? Promise.resolve(new Response('{}', { status: 500 })) : mock.fetch(u, i)) as typeof fetch,
+    });
+    const r = await buildRecommendations(client, { skipped: new Set() });
+    const neon = r.candidates.find((c) => c.key === 'movie:101')!;
+    expect(neon.sourceCount).toBe(3);
+    expect(neon.sourceTitles).toEqual(['Arrival', 'Blade Runner']);
+    expect(r.stats.sourceFailures).toBe(0);
+  });
+
   it('counts a source once even if it lists a title in both recommendations and similar', async () => {
     const { client } = setup();
     const { candidates } = await buildRecommendations(client, { skipped: new Set() });

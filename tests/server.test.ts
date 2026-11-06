@@ -178,12 +178,14 @@ describe('API whitelist and upstream calls', () => {
     expect((await get('/api/v1/media?filter=available&take=50&skip=100')).status).toBe(200);
     expect((await get('/api/v1/movie/603/recommendations?page=2')).status).toBe(200);
     expect((await get('/api/v1/tv/1399/similar')).status).toBe(200);
+    expect((await get('/api/v1/movie/603')).status).toBe(200);
 
     const calls = s.fetchImpl.mock.calls;
     expect(calls.map((c) => c[0])).toEqual([
       'http://overseerr.test:5055/api/v1/media?filter=available&take=50&skip=100',
       'http://overseerr.test:5055/api/v1/movie/603/recommendations?page=2',
       'http://overseerr.test:5055/api/v1/tv/1399/similar?page=1',
+      'http://overseerr.test:5055/api/v1/movie/603',
     ]);
     for (const [, init] of calls) {
       expect((init!.headers as Record<string, string>)['X-Api-Key']).toBe(API_KEY);
@@ -196,6 +198,16 @@ describe('API whitelist and upstream calls', () => {
     const cookie = await session(s);
     const body = await (await s.req('/api/v1/auth/me', { headers: { cookie } })).json();
     expect(body).toEqual({ id: 1, email: 'a@b.c', displayName: 'Ann' });
+  });
+
+  it('reduces title detail to id/title/name and never leaks the key', async () => {
+    const s = await start({ fetchImpl: async () => json({ id: 603, title: 'The Matrix', overview: 'x', budget: 1, apiKey: API_KEY, mediaInfo: { secret: API_KEY } }) });
+    const cookie = await session(s);
+    const body = await (await s.req('/api/v1/movie/603', { headers: { cookie } })).json();
+    expect(body).toEqual({ id: 603, title: 'The Matrix' });
+    expect((await s.req('/api/v1/movie/603?language=en', { headers: { cookie } })).status).toBe(400);
+    expect((await s.req('/api/v1/movie/603', { method: 'POST', headers: { cookie, 'content-type': 'application/json' } })).status).toBe(405);
+    expect((await s.req('/api/v1/movie/0', { headers: { cookie } })).status).toBe(400);
   });
 
   it('rejects arbitrary routes, methods and invalid input without calling upstream', async () => {
