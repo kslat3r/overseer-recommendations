@@ -1,0 +1,20 @@
+{
+  "name": "overseer-recommendations",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Swipe-style recommendations for Overseerr and Jellyseerr, as a static browser-only SPA.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "vite": "^8.3.6",
+    "vitest": "^5.1.0"
+  }
+}
