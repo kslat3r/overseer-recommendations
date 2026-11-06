@@ -4,6 +4,11 @@ import type { MediaFilter, MediaPage, MediaType, ResultsPage, UserInfo } from '.
 export interface ClientOptions {
   baseUrl: string;
   apiKey: string;
+  /**
+   * Server mode: talk to this app's own same-origin /api/v1 proxy with the login
+   * session cookie. No URL or API key is used or sent; the server holds them.
+   */
+  sameOrigin?: boolean;
   fetchImpl?: typeof fetch;
   /** Protocol of the page making the calls; defaults to location.protocol. */
   pageProtocol?: string;
@@ -56,17 +61,17 @@ export function createClient(opts: ClientOptions): OverseerrClient {
   }
 
   async function call<T>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<T> {
-    const base = normalizeBaseUrl(opts.baseUrl);
-    const url = `${base}/api/v1${path}`;
-    const parsed = new URL(url);
-    if (pageProtocol === 'https:' && parsed.protocol === 'http:' && !isPotentiallyTrustworthy(parsed.hostname)) {
+    const url = opts.sameOrigin ? `/api/v1${path}` : `${normalizeBaseUrl(opts.baseUrl)}/api/v1${path}`;
+    const parsed = opts.sameOrigin ? null : new URL(url);
+    if (parsed && pageProtocol === 'https:' && parsed.protocol === 'http:' && !isPotentiallyTrustworthy(parsed.hostname)) {
       throw new ApiError({
         kind: 'mixed-content',
         title: 'Browser blocks http:// from this https:// page',
         hint: 'This page is served over HTTPS, so the browser refuses plain-HTTP servers. Put your Overseerr behind an HTTPS reverse proxy (see the README: Caddy + tailscale serve) and use its https:// URL.',
       });
     }
-    const headers: Record<string, string> = { 'X-Api-Key': opts.apiKey, Accept: 'application/json' };
+    const headers: Record<string, string> = { Accept: 'application/json' };
+    if (!opts.sameOrigin) headers['X-Api-Key'] = opts.apiKey;
     if (body !== undefined) headers['Content-Type'] = 'application/json';
 
     let res: Response;
@@ -76,7 +81,7 @@ export function createClient(opts: ClientOptions): OverseerrClient {
           method,
           headers,
           body: body === undefined ? undefined : JSON.stringify(body),
-          credentials: 'omit',
+          credentials: opts.sameOrigin ? 'same-origin' : 'omit',
           signal,
         }),
       );
@@ -84,6 +89,9 @@ export function createClient(opts: ClientOptions): OverseerrClient {
       if (e instanceof ApiError) throw e;
       if (e instanceof DOMException && e.name === 'AbortError') {
         throw new ApiError({ kind: 'timeout', title: 'The server took too long to respond', hint: `No answer within ${Math.round(timeoutMs / 1000)}s. Check that the server and your VPN/tailnet are up.` });
+      }
+      if (opts.sameOrigin) {
+        throw new ApiError({ kind: 'unreachable', title: 'Could not reach the app server', hint: 'The server may be waking up or restarting. Wait a few seconds and try again.' });
       }
       throw await classifyNetworkFailure(url);
     }
@@ -126,14 +134,27 @@ export function createClient(opts: ClientOptions): OverseerrClient {
 
   async function httpError(res: Response, method: string, path: string): Promise<ApiError> {
     let detail: string | undefined;
+    let code: string | undefined;
     try {
-      const j = (await res.json()) as { message?: unknown };
+      const j = (await res.json()) as { message?: unknown; code?: unknown };
       if (typeof j?.message === 'string') detail = j.message;
+      if (typeof j?.code === 'string') code = j.code;
     } catch {
       /* no body */
     }
     const status = res.status;
     const base = { status, detail };
+    if (opts.sameOrigin) {
+      if (code === 'upstream-auth') {
+        return new ApiError({ kind: 'upstream-auth', title: 'Overseerr rejected the server’s API key', hint: 'The OVERSEERR_API_KEY configured on the app server is wrong or was revoked. Update it on the server and restart; signing in again will not help.', ...base });
+      }
+      if (status === 401 || code === 'session') {
+        return new ApiError({ kind: 'session', title: 'Your session has expired', hint: 'Sign in again to continue.', ...base });
+      }
+      if (code === 'upstream-forbidden') {
+        return new ApiError({ kind: 'forbidden', title: detail ?? 'Overseerr denied that request', hint: 'The server’s API key user lacks permission for this, or has hit its request quota.', ...base });
+      }
+    }
     if (status === 401 || (status === 403 && method === 'GET')) {
       return new ApiError({ kind: 'auth', title: 'The API key was rejected', hint: 'Copy the API key from Overseerr under Settings > General and paste it again.', ...base });
     }

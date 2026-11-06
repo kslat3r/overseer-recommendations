@@ -17,7 +17,9 @@ let view: View = 'setup';
 let deck: Candidate[] = [];
 let busy = false;
 let progress = '';
-let failure: { title: string; hint: string } | null = null;
+let failure: { title: string; hint: string; kind?: string } | null = null;
+/** True when this page is served by the app's own Node server (same-origin /api/v1 proxy). */
+let serverMode = false;
 let settingsOpen = false;
 let scanToken = 0;
 let detachSwipe: (() => void) | null = null;
@@ -36,6 +38,7 @@ function h<K extends keyof HTMLElementTagNameMap>(tag: K, props: Record<string, 
 }
 
 function makeClient(): OverseerrClient {
+  if (serverMode) return createClient({ baseUrl: '', apiKey: '', sameOrigin: true });
   if (settings.demo) {
     const mock = createMockApi({ latencyMs: 250 });
     return createClient({ baseUrl: 'https://demo.invalid', apiKey: mock.apiKey, fetchImpl: mock.fetch });
@@ -138,6 +141,13 @@ async function requestTop() {
     });
   } catch (e) {
     const d = describeError(e);
+    if (d.kind === 'session') {
+      failure = d;
+      view = 'error';
+      busy = false;
+      render();
+      return;
+    }
     toast(`Couldn’t request ${c.title}`, 'err', [d.title, d.hint].filter(Boolean).join(' — '));
     busy = false;
     springBack();
@@ -205,7 +215,7 @@ function render(full = true) {
   if (settingsOpen) app.append(settingsDialog());
 }
 
-const isConfigured = () => settings.demo || (!!settings.baseUrl && !!settings.apiKey);
+const isConfigured = () => serverMode || settings.demo || (!!settings.baseUrl && !!settings.apiKey);
 
 function iconButton(label: string, glyph: string, onClick: () => void, disabled: boolean) {
   const b = h('button', { class: 'icon-btn', type: 'button', 'aria-label': label, title: label }, glyph);
@@ -251,6 +261,10 @@ function errorView() {
   const f = failure ?? { title: 'Something went wrong', hint: '' };
   const p = panel('⚠', f.title, f.hint || 'Please try again.');
   p.classList.add('error');
+  if (f.kind === 'session') {
+    p.append(button('Sign in', () => location.assign('/login'), 'btn primary'));
+    return p;
+  }
   p.append(button('Try again', () => void scan(), 'btn primary'), button('Settings', () => ((settingsOpen = true), render()), 'btn ghost'));
   return p;
 }
@@ -324,7 +338,49 @@ function updateControls() {
   document.querySelector('.deck')?.setAttribute('aria-busy', String(busy));
 }
 
+function serverSettingsDialog() {
+  const status = h('p', { class: 'form-status', role: 'status' });
+  const form = h(
+    'form',
+    { class: 'dialog-body' },
+    h('h2', { id: 'settings-title' }, 'Settings'),
+    h('p', { class: 'help' }, 'This app is connected through its own server. The Overseerr address and API key are configured on the server (OVERSEERR_URL and OVERSEERR_API_KEY) and never reach this browser. Skipped titles are still remembered only in this browser.'),
+    status,
+  );
+  const test = button('Test connection', async () => {
+    status.className = 'form-status';
+    try {
+      const me = await makeClient().getMe();
+      status.textContent = `Connected as ${me.displayName ?? me.username ?? me.email ?? 'user ' + me.id}.`;
+      status.classList.add('ok');
+    } catch (e) {
+      const d = describeError(e);
+      status.textContent = [d.title, d.hint].filter(Boolean).join(' — ');
+      status.classList.add('bad');
+    }
+  }, 'btn ghost');
+  const close = button('Close', () => ((settingsOpen = false), render()), 'btn primary');
+  const logout = button('Sign out', async () => {
+    try {
+      await fetch('/logout', { method: 'POST', credentials: 'same-origin' });
+    } finally {
+      location.assign('/login');
+    }
+  }, 'btn danger');
+  form.append(h('div', { class: 'row' }, test, close, logout));
+  form.addEventListener('submit', (ev) => ev.preventDefault());
+  const dlg = h('div', { id: 'settings-dialog', class: 'backdrop' }, h('div', { class: 'dialog', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'settings-title' }, form));
+  dlg.addEventListener('pointerdown', (e) => {
+    if (e.target === dlg) {
+      settingsOpen = false;
+      render();
+    }
+  });
+  return dlg;
+}
+
 function settingsDialog() {
+  if (serverMode) return serverSettingsDialog();
   const url = h('input', { id: 'f-url', type: 'url', inputmode: 'url', autocomplete: 'off', placeholder: 'https://overseerr.your-tailnet.ts.net', spellcheck: 'false' });
   url.value = settings.baseUrl;
   const key = h('input', { id: 'f-key', type: 'password', autocomplete: 'off', placeholder: 'Overseerr API key', spellcheck: 'false' });
@@ -416,6 +472,22 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-if (isConfigured()) void scan();
-else render();
+/** Server mode exists only when the Node server answers its same-origin status endpoint. */
+async function detectServerMode(): Promise<boolean> {
+  try {
+    const res = await fetch('api/status', { credentials: 'same-origin', headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(3000) });
+    if (res.status === 401) return true; // gated server whose session just expired
+    if (!res.ok) return false;
+    const j = (await res.json()) as { mode?: unknown };
+    return j?.mode === 'server';
+  } catch {
+    return false; // static hosting (GitHub Pages, file server): direct mode with local settings
+  }
+}
+
+void (async () => {
+  serverMode = await detectServerMode();
+  if (isConfigured()) void scan();
+  else render();
+})();
 

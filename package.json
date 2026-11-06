@@ -3,20 +3,28 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Swipe-style recommendations for Overseerr and Jellyseerr, as a static browser-only SPA.",
+  "description": "Swipe-style recommendations for Overseerr and Jellyseerr, served by a small Express server with a password-protected same-origin Overseerr proxy (optional static browser-only build also available).",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && vite build && tsc -p tsconfig.server.json",
+    "start": "node dist-server/index.js",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "typecheck": "tsc --noEmit"
+    "test:e2e:server": "node e2e/run-server-e2e.mjs",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.server.json"
   },
   "devDependencies": {
     "@playwright/test": "^1.65.0",
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.6.6",
     "typescript": "^7.0.2",
     "vite": "^8.3.6",
     "vitest": "^5.1.0"
+  },
+  "dependencies": {
+    "express": "^5.3.0",
+    "https-proxy-agent": "^9.1.0"
   }
 }

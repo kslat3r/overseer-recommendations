@@ -10,7 +10,9 @@ export type ApiErrorKind =
   | 'conflict'
   | 'server'
   | 'http'
-  | 'bad-response';
+  | 'bad-response'
+  | 'session'
+  | 'upstream-auth';
 
 export interface ApiErrorInit {
   kind: ApiErrorKind;
@@ -37,7 +39,7 @@ export class ApiError extends Error {
   }
 }
 
-export function describeError(err: unknown): { title: string; hint: string } {
-  if (err instanceof ApiError) return { title: err.message, hint: err.hint };
+export function describeError(err: unknown): { title: string; hint: string; kind?: ApiErrorKind } {
+  if (err instanceof ApiError) return { title: err.message, hint: err.hint, ...(err.kind === 'session' ? { kind: err.kind } : {}) };
   return { title: err instanceof Error ? err.message : 'Something went wrong', hint: '' };
 }
